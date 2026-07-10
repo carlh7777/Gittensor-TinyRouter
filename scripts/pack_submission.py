@@ -38,7 +38,8 @@ def _estimate_cost() -> float:
     if not ledger_path:
         return 0.0
     try:
-        import hashlib
+        from trinity.llm.cost_ledger import entry_payload, link_hash
+
         total = 0.0
         pricing = {"qwen3.5-35b-a3b": 0.90, "minimax-m3": 0.90, "deepseek-v4-flash": 0.90}
         prev_hash = ""
@@ -50,9 +51,9 @@ def _estimate_cost() -> float:
                 rec = json.loads(line)
                 # Verify hash chain (skip if hash field missing — pre-chain entries)
                 expected_h = rec.pop("h", None)
-                payload = json.dumps(rec, sort_keys=True)
                 if expected_h is not None:
-                    computed_h = hashlib.sha256((prev_hash + payload).encode()).hexdigest()
+                    payload = entry_payload(rec["m"], rec["p"], rec["c"])
+                    computed_h = link_hash(prev_hash, payload)
                     if computed_h == expected_h:
                         prev_hash = computed_h
                 m = rec.get("m", "")

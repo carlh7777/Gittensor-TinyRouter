@@ -19,9 +19,14 @@ tokens. PRICES below should track the repo's current default model pool; pass
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
+from pathlib import Path
+
+_REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_REPO / "src"))
+
+from trinity.llm.cost_ledger import verify_ledger_chain  # noqa: E402
 
 # ---- OpenRouter prices ($ per 1M tokens), (input, output). ----
 PRICES = {
@@ -35,47 +40,6 @@ _DEFAULT_BLENDED_OUT = sum(p[1] for p in PRICES.values()) / len(PRICES)
 
 def cost(prompt_tok: int, completion_tok: int, in_rate: float, out_rate: float) -> float:
     return prompt_tok / 1e6 * in_rate + completion_tok / 1e6 * out_rate
-
-
-def verify_ledger_chain(path: str) -> tuple[bool, int, str]:
-    """Verify the hash-chain integrity of a cost ledger.
-
-    Each entry's ``h`` field must equal
-    ``sha256(prev_h + {"m":...,"p":...,"c":...})``.
-    The first entry's previous hash is the empty string.
-
-    Returns:
-        (valid, num_entries, error_message).
-        If the chain is valid, ``error_message`` is empty.
-    """
-    prev_hash = ""
-    entries = 0
-    with open(path) as f:
-        for lineno, line in enumerate(f, 1):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                r = json.loads(line)
-            except json.JSONDecodeError:
-                return False, entries, f"line {lineno}: invalid JSON"
-            expected_h = r.pop("h", None)
-            payload = json.dumps(r, sort_keys=True)
-            computed_h = hashlib.sha256((prev_hash + payload).encode()).hexdigest()
-
-            if expected_h is None:
-                return False, entries, (
-                    f"line {lineno}: missing hash field 'h' "
-                    f"(ledger entries must be written by OpenRouterPool with hash-chain enabled)"
-                )
-            if computed_h != expected_h:
-                return False, entries, (
-                    f"line {lineno}: hash mismatch — expected {computed_h[:16]}..., "
-                    f"got {expected_h[:16]}... (chain broken or entry tampered)"
-                )
-            prev_hash = computed_h
-            entries += 1
-    return True, entries, ""
 
 
 def report_ledger(path: str) -> None:

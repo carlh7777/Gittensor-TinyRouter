@@ -83,12 +83,12 @@ def _ledger_append(model: str, prompt_tokens: int, completion_tokens: int) -> No
     one short line per call (atomic enough for concurrent training processes).
     Best-effort: never let cost bookkeeping break an inference call.
     """
-    import hashlib
-
     path = os.environ.get("TRINITY_COST_LEDGER")
     if not path:
         return
     try:
+        from .cost_ledger import entry_payload, link_hash
+
         short = model.rsplit("/", 1)[-1]
         pt = int(prompt_tokens)
         ct = int(completion_tokens)
@@ -109,8 +109,8 @@ def _ledger_append(model: str, prompt_tokens: int, completion_tokens: int) -> No
         except (OSError, ValueError):
             prev_hash = ""
 
-        payload = f'{{"m":"{short}","p":{pt},"c":{ct}}}'
-        h = hashlib.sha256((prev_hash + payload).encode()).hexdigest()
+        payload = entry_payload(short, pt, ct)
+        h = link_hash(prev_hash, payload)
 
         with open(path, "a") as f:
             f.write(f'{{"m":"{short}","p":{pt},"c":{ct},"h":"{h}"}}\n')

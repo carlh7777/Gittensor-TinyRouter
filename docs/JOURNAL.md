@@ -18,6 +18,14 @@ protocol. **Newest entries at the top.** Tag each entry with one or more of:
 
 ---
 
+## 2026-07-10 — Cost-ledger hash verifier used a different payload than the writer  #mistake #finding
+**Context:** `scripts/cost_report.py --ledger` is supposed to verify the tamper-evident hash chain before reporting spend.
+**Expected:** an honest ledger written by `OpenRouterPool._ledger_append` verifies cleanly.
+**Actual:** every real entry failed with "hash mismatch". The writer hashed `{"m":"...","p":N,"c":N}` (fixed key order, no spaces); the verifier hashed `json.dumps(rec, sort_keys=True)` (`{"c": N, "m": "...", "p": N}` with spaces) — a different string, so `sha256` never matched. `pack_submission._estimate_cost` had the same dead check (prev_hash never advanced).
+**Root cause:** verifier re-serialized the parsed JSON instead of reconstructing the writer's canonical payload.
+**Fix / decision:** shared `trinity.llm.cost_ledger` (`entry_payload` / `link_hash` / `verify_ledger_chain`); writer + `cost_report` + `pack_submission` all use it. Covered by `tests/test_cost_ledger_hash.py`.
+**Follow-up:** `pack_submission` still prices tokens at a flat $0.90/Mtok — separate pricing-dedupe fix.
+
 ## 2026-07-10 — Duplicate-detection gate (Gate 3) defeated by re-rolling SVF scales  #mistake #finding #decision
 
 **Context:** auditing the anti-cheat gates in `scripts/pr_eval.py`. Gate 3
